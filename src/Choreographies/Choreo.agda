@@ -60,24 +60,60 @@ module Epp (target : Location) where
   ... | no ¬p = ⊤
 
   -- Project the choreography to the target endpoint.
-  epp : ∀{l} → Choreo (A ＠ l) → Network (A ＠ⁿ l)
-  epp {l = l} (return x) with l ≟ target
-  ... | yes p = return (unwrap {{p}} x)
-  ... | no ¬p = return tt
-  epp (bind (lift l (here   p a)) k) = bind (exec a) (epp ∘ k ∘ here p)
-  epp (bind (lift l (there ¬p a)) k) = epp (k (there ¬p a))
-  epp (bind (comm s r (here _ m)) k) with r ≟ target
-  ... | yes p = epp (k (here p m))
-  ... | no ¬p = bind (send m r) (epp ∘ k ∘ there ¬p)
-  epp (bind (comm s r (there _ m)) k) with r ≟ target
-  ... | yes p = bind (recv s) (epp ∘ k ∘ here p)
-  ... | no ¬p = epp (k (there ¬p m))
+  module _ {A : Type} {l : Location} where
+    epp : Choreo (A ＠ l) → Network (A ＠ⁿ l)
+    epp (return x) with l ≟ target
+    ... | yes p = return (unwrap {{p}} x)
+    ... | no ¬p = return tt
+    epp (bind (lift l (here   p a)) k) = bind (exec a) (epp ∘ k ∘ here p)
+    epp (bind (lift l (there ¬p a)) k) = epp (k (there ¬p a))
+    epp (bind (comm s r (here _ m)) k) with r ≟ target
+    ... | yes p = epp (k (here p m))
+    ... | no ¬p = bind (send m r) (epp ∘ k ∘ there ¬p)
+    epp (bind (comm s r (there _ m)) k) with r ≟ target
+    ... | yes p = bind (recv s) (epp ∘ k ∘ here p)
+    ... | no ¬p = epp (k (there ¬p m))
+
+module Epp' (target : Location) (A : Type) (l : Location) where
+  _＠_ : Type → Location → Type
+  A ＠ l with l ≟ target
+  ... | yes _ = A
+  ... | no  _ = ⊤
+
+  open Choreo _＠_
+
+  instance
+    ＠-isLocated : IsLocated _＠_
+    IsLocated.fmap ＠-isLocated {l} with l ≟ target
+    ... | yes _ = λ f → f
+    ... | no  _ = λ _ x → x
+    IsLocated.pure ＠-isLocated {l} with l ≟ target
+    ... | yes _ = λ x → x
+    ... | no  _ = λ _ → tt
+    IsLocated.join ＠-isLocated {l} with l ≟ target
+    ... | yes _ = λ x → x
+    ... | no  _ = λ x → x
+
+  empty : {False (l ≟ target)} → A ＠ l
+  empty {¬p} with l ≟ target
+  ... | yes _ = ⊥-elim ¬p
+  ... | no  _ = ¬p
+
+  epp : Choreo (A ＠ l) → Network (A ＠ l)
+  epp (return x) = return x
+  epp (bind (Choreo.lift l a) k) with l ≟ target
+  ... | yes _ = bind (exec a) (epp ∘ k)
+  ... | no  _ = (epp ∘ k) tt
+  epp (bind (Choreo.comm s r m) k) with s ≟ target | r ≟ target
+  ... | yes _ | yes _ = (epp ∘ k) m
+  ... | yes _ | no  _ = bind (send m r) (epp ∘ k)
+  ... | no  _ | yes _ = bind (recv   s) (epp ∘ k)
+  ... | no  _ | no  _ = (epp ∘ k) tt
 
 module _ where
   open import Data.Nat using (ℕ; _+_)
   open IsLocated {{...}}
 
-  -- Some locations to work with.
   alice bob : Location
   alice = "alice"
   bob   = "bob"
@@ -98,3 +134,11 @@ module _ where
   test-bob : Network ⊤
   test-bob = epp (choreo _＠_ empty)
     where open Epp bob
+
+  test-alice' : ℕ → Network ℕ
+  test-alice' n = epp (choreo _＠_ (pure {l = alice} n))
+    where open Epp' alice ℕ alice
+
+  test-bob' : Network ⊤
+  test-bob' = epp (choreo _＠_ empty)
+    where open Epp' bob ℕ alice
