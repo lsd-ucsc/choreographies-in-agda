@@ -4,6 +4,13 @@ open import Agda.Primitive
 
 module Choreographies.Freer where
 
-data Freer (F : Type → Type₁) : Type → Type₁ where
-  pure : ∀ {A} → A → Freer F A
-  bind : ∀ {A B} → F A → (A → Freer F B) → Freer F B
+open import Function using (_∘_)
+
+module _ (F : Type → Type₁) where
+  data Freer : Type → Type₁ where
+    pure : ∀ {A} → A → Freer A
+    bind : ∀ {A B} → F A → (A → Freer B) → Freer B
+
+  map : ∀{A B} → (A → B) → (Freer A → Freer B)
+  map f (pure   x) = pure (f x)
+  map f (bind e x) = bind e (map f ∘ x)

@@ -9,25 +9,25 @@ open import Data.String as String using (String)
 open import Relation.Nullary using (Dec)
 open import Relation.Binary.PropositionalEquality using (_≡_)
 
-opaque
-  Location : Type
-  Location = String
+Location : Type
+Location = String
 
-  _≟_ : (l l' : Location) → Dec (l ≡ l')
-  _≟_ = String._≟_
+_≟_ : (l l' : Location) → Dec (l ≡ l')
+_≟_ = String._≟_
 
-  #_ : String → Location
-  # n = n
+record IsLocated (_＠_ : Type → Location → Type) : Type₁ where
+  field fmap : ∀{l} {A B : Type} → (A → B)       → ((A ＠ l) → (B ＠ l))
+  field pure : ∀{l} {A   : Type} →  A            → A ＠ l
+  field join : ∀{l} {A   : Type} → (A ＠ l) ＠ l → A ＠ l
 
-  -- we make _＠_ opaque so that `a @ "alice"` and `a @ "bob"`
-  -- do not trivially reduce to the same type.
-  -- without this, we lose all location safety.
-  _＠_ : Type -> Location -> Type
-  a ＠ l = Maybe a
+  fmap₀ = pure
+  fmap₁ = fmap
 
-  fmap₁ : ∀{a b l} → (a → b) → (a ＠ l) → (b ＠ l)
-  fmap₁ = Maybe.map
+  fmap₂ : ∀{l} {A₁ A₂ B : Type} → (A₁ → A₂ → B) → ((A₁ ＠ l) → (A₂ ＠ l) → (B ＠ l))
+  fmap₂ f a＠l b＠l = join (fmap (λ f' → fmap f' b＠l) (fmap f a＠l))
 
-  fmap₂ : ∀{a₁ a₂ b l} → (a₁ → a₂ → b)
-        → (a₁ ＠ l) → (a₂ ＠ l) → (b ＠ l)
-  fmap₂ = Maybe.zipWith
+  _>>=_ : ∀{l} {A B : Type} → A ＠ l → (A → B ＠ l) → B ＠ l
+  x >>= f = join (fmap f x)
+
+  _>>_ : ∀{l} {A B : Type} → A ＠ l → B ＠ l → B ＠ l
+  x >> y = x >>= (λ _ → y)
