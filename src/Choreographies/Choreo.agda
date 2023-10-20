@@ -109,10 +109,10 @@ module Epp' (target : Location) (A : Type) (l : Location) where
 
   epp : Choreo (A ＠ l) → Network (A ＠ l)
   epp (return x) = return x
-  epp (bind (Choreo.lift l a) k) with l ≟ target
+  epp (bind (lift l a) k) with l ≟ target
   ... | yes _ = bind (exec a) (epp ∘ k)
   ... | no  _ = (epp ∘ k) a
-  epp (bind (Choreo.comm s r m) k) with s ≟ target | r ≟ target
+  epp (bind (comm s r m) k) with s ≟ target | r ≟ target
   ... | yes _ | yes _ = (epp ∘ k) m
   ... | yes _ | no  _ = bind (send m r) (epp ∘ k)
   ... | no  _ | yes _ = bind (recv   s) (epp ∘ k)
