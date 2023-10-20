@@ -11,7 +11,7 @@ open import Data.Unit using (⊤; tt)
 open import Data.Empty using (⊥-elim)
 open import Function using (_∘_)
 open import Relation.Binary.PropositionalEquality using (_≡_; _≢_)
-open import Relation.Nullary.Decidable using (False; toWitnessFalse)
+open import Relation.Nullary.Decidable using (True; False; toWitness; toWitnessFalse)
 open import Relation.Nullary using (yes; no)
 
 private
@@ -42,6 +42,9 @@ module Epp (target : Location) where
 
   empty : ∀{A l} → {False (l ≟ target)} → A ＠ l
   empty {_} {_} {¬p} = there (toWitnessFalse ¬p) tt
+
+  given : ∀{A l} → {True (l ≟ target)} → A → A ＠ l
+  given {_} {_} {p} = here (toWitness p)
 
   instance
     ＠-isLocated : IsLocated _＠_
@@ -99,6 +102,11 @@ module Epp' (target : Location) (A : Type) (l : Location) where
   ... | yes _ = ⊥-elim ¬p
   ... | no  _ = ¬p
 
+  given : {True (l ≟ target)} → A → A ＠ l
+  given {p} with l ≟ target
+  ... | yes _ = λ a → a
+  ... | no ¬p = ⊥-elim p
+
   epp : Choreo (A ＠ l) → Network (A ＠ l)
   epp (return x) = return x
   epp (bind (Choreo.lift l a) k) with l ≟ target
@@ -112,7 +120,6 @@ module Epp' (target : Location) (A : Type) (l : Location) where
 
 module _ where
   open import Data.Nat using (ℕ; _+_)
-  open IsLocated {{...}}
 
   alice bob : Location
   alice = "alice"
@@ -120,6 +127,7 @@ module _ where
 
   module _ (_＠_ : Type → Location → Type) {{_ : IsLocated _＠_}} where
     open Choreo _＠_
+    open IsLocated {{...}}
 
     choreo : (ℕ ＠ alice) → Choreo (ℕ ＠ alice)
     choreo a =
@@ -128,7 +136,7 @@ module _ where
       return a″
 
   test-alice : ℕ → Network ℕ
-  test-alice n = epp (choreo _＠_ (pure n))
+  test-alice n = epp (choreo _＠_ (given n))
     where open Epp alice
 
   test-bob : Network ⊤
@@ -136,7 +144,7 @@ module _ where
     where open Epp bob
 
   test-alice' : ℕ → Network ℕ
-  test-alice' n = epp (choreo _＠_ (pure {l = alice} n))
+  test-alice' n = epp (choreo _＠_ (given n))
     where open Epp' alice ℕ alice
 
   test-bob' : Network ⊤
