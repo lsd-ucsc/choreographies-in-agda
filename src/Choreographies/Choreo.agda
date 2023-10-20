@@ -91,16 +91,10 @@ module _ where
       bind (bob   ∼[ a′ ]> alice) λ a″ →
       return a″
 
-  -- Project to alice, and adapt the interface given that we know who the projection target is.
-  -- In particular, since `a @ alice` is known to be equivalent to `a` when projecting to `alice`,
-  -- we can unwrap the final result to a bare `a`.
   test-alice : ℕ → Network ℕ
   test-alice n = epp (choreo _＠_ (pure n))
     where open Epp alice
 
-  -- Project to bob, and adapt the interface given that we know who the projection target is.
-  -- In particular, `ℕ @ alice` is trivial when projecting to `bob`, so to provide the initial value,
-  -- we merely need to assert that we are not `alice`.
   test-bob : Network ⊤
   test-bob = epp (choreo _＠_ empty)
     where open Epp bob
