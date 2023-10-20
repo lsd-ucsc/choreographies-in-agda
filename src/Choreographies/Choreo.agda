@@ -111,12 +111,12 @@ module Epp' (target : Location) (A : Type) (l : Location) where
   epp (return x) = return x
   epp (bind (Choreo.lift l a) k) with l ≟ target
   ... | yes _ = bind (exec a) (epp ∘ k)
-  ... | no  _ = (epp ∘ k) tt
+  ... | no  _ = (epp ∘ k) a
   epp (bind (Choreo.comm s r m) k) with s ≟ target | r ≟ target
   ... | yes _ | yes _ = (epp ∘ k) m
   ... | yes _ | no  _ = bind (send m r) (epp ∘ k)
   ... | no  _ | yes _ = bind (recv   s) (epp ∘ k)
-  ... | no  _ | no  _ = (epp ∘ k) tt
+  ... | no  _ | no  _ = (epp ∘ k) m
 
 module _ where
   open import Data.Nat using (ℕ; _+_)
