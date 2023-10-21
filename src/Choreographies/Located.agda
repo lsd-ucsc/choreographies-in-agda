@@ -31,3 +31,6 @@ record IsLocated (_＠_ : Type → Location → Type) : Type₁ where
 
   _>>_ : ∀{l} {A B : Type} → A ＠ l → B ＠ l → B ＠ l
   x >> y = x >>= (λ _ → y)
+
+  _<*>_ : ∀{l} {A B : Type} → (A → B) ＠ l → (A ＠ l → B ＠ l)
+  _<*>_ = fmap₂ (λ f x → f x)

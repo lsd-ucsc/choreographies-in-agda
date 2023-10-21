@@ -142,7 +142,7 @@ module _ where
   choreo a =
     bind (alice ∼[ a  ]> bob)   λ a′ →
     bind (bob   ∼[ a′ ]> alice) λ a″ →
-    return (fmap₂ _+_ a a″)
+    return ⦇ a + a″ ⦈
 
   test-alice : ℕ → Network ℕ
   test-alice n = epp (choreo (given n))
