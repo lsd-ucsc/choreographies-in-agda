@@ -14,7 +14,7 @@ open import Data.Unit using (⊤)
 
 data NetworkSig : Type → Type₁ where
   exec : M A → NetworkSig A
-  send : A → Location → NetworkSig ⊤
+  send : M A → Location → NetworkSig ⊤
   recv : Location → NetworkSig A
 
 Network : Type → Type₁
