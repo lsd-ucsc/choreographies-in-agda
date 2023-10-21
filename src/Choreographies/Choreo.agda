@@ -2,7 +2,7 @@
 open import Agda.Primitive
   using () renaming (Set to Type)
 
-module Choreographies.Choreo (M : Type → Type) (mpure : ∀{A} → A → M A) where
+module Choreographies.Choreo (M : Type → Type) (mpure : ∀{A} → A → M A) (mmap : ∀{A B} → (A → B) → (M A → M B)) where
 
 open import Choreographies.Freer as Freer renaming (pure to return)
 open import Choreographies.Located
@@ -19,8 +19,6 @@ private
     A : Type
 
 module Choreo {_＠_} {{_ : IsLocated _＠_}} where
-  open IsLocated {{...}}
-
   data ChoreoSig : Type → Type₁ where
     step : ∀ s r → M A ＠ s → ChoreoSig (A ＠ r)
 
@@ -34,6 +32,8 @@ module Choreo {_＠_} {{_ : IsLocated _＠_}} where
 
   Choreo : Type → Type₁
   Choreo = Freer ChoreoSig
+
+open Choreo {{...}} public
 
 module Epp (target : Location) where
   data _＠_ (A : Type) (l : Location) : Type where
@@ -52,8 +52,6 @@ module Epp (target : Location) where
 
   pass : ∀{ℓ₁ ℓ₂} {A : Type ℓ₁} {B : Type ℓ₂} → A → (A → B) → B
   pass a f = f a
-
-  open Choreo {{...}}
 
   instance
     ＠-isLocated : IsLocated _＠_
@@ -102,8 +100,6 @@ module Epp' (target : Location) (A : Type) (l : Location) where
     ... | yes _ = λ x → x
     ... | no  _ = λ x → x
 
-  open Choreo {{...}}
-
   empty : {False (l ≟ target)} → A ＠ l
   empty {¬p} with l ≟ target
   ... | yes _ = ⊥-elim ¬p
@@ -125,12 +121,48 @@ module Epp' (target : Location) (A : Type) (l : Location) where
   ... | no  _ | yes _ = bind (recv   s) (epp ∘ k)
   ... | no  _ | no  _ = pass       m    (epp ∘ k)
 
+module EppMaybe (target : Location) (A : Type) (l : Location) where
+  open import Data.Maybe as Maybe using (Maybe; just; nothing)
+
+  _＠_ : Type → Location → Type
+  A ＠ _ = Maybe A
+
+  instance
+    ＠-isLocated : IsLocated _＠_
+    IsLocated.fmap ＠-isLocated = Maybe.map
+    IsLocated.pure ＠-isLocated = Maybe.just
+    IsLocated.join ＠-isLocated = Maybe._>>= Function.id
+
+  epp : Choreo (A ＠ l) → Network (A ＠ l)
+  epp (return x) = return x
+  epp (bind (Choreo.step {A = A} s r m) k) with s ≟ target | r ≟ target
+  ... | yes _ | yes _ = Maybe.maybe
+                          -- We're sending data to ourself (i.e. local effectful computation).
+                          (λ m' → bind (exec m') (epp ∘ k ∘ just))
+                          -- We're sending nothing to ourself (absurd)
+                          (epp (k nothing))
+                          m
+  ... | yes _ | no  _ = bind (send {A = Maybe A}
+                                   (Maybe.maybe
+                                     -- We're sending data to someone.
+                                     (mmap just)
+                                     -- We're sending nothing to someone (absurd, but
+                                     --   they're expecting us to send *something*)
+                                     (mpure nothing)
+                                     m )
+                                   r ) λ _ →
+                        epp (k nothing)
+  ... | no  _ | yes _ = bind (recv s)
+                          (Maybe.maybe
+                            -- We've received data from someone.
+                            (epp ∘ k ∘ just)
+                            -- We've received nothing from someone. (extraordinarily absurd)
+                            (epp (k nothing)) )
+  ... | no  _ | no  _ = epp (k (nothing))
+
 module _ where
   variable
     _＠_ : Type → Location → Type
-
-  open Choreo {{...}}
-  open IsLocated {{...}}
 
   open import Data.Nat using (ℕ; _+_)
 
