@@ -18,7 +18,7 @@ private
   variable
     A : Type
 
-module Choreo (_＠_ : Type → Location → Type) where
+module Choreo {_＠_} {{_ : IsLocated _＠_}} where
   data ChoreoSig : Type → Type₁ where
     lift : ∀ l   → M A ＠ l → ChoreoSig (A ＠ l)
     comm : ∀ s r →   A ＠ s → ChoreoSig (A ＠ r)
@@ -34,8 +34,6 @@ module Epp (target : Location) where
     here  : l ≡ target → A → A ＠ l
     there : l ≢ target → ⊤ → A ＠ l
 
-  open Choreo _＠_
-
   unwrap : ∀{A l} → {{l ≡ target}} → A ＠ l → A
   unwrap       (here  _  x) = x
   unwrap {{p}} (there ¬p _) = ⊥-elim (¬p p)
@@ -45,6 +43,8 @@ module Epp (target : Location) where
 
   given : ∀{A l} → {True (l ≟ target)} → A → A ＠ l
   given {_} {_} {p} = here (toWitness p)
+
+  open Choreo {{...}}
 
   instance
     ＠-isLocated : IsLocated _＠_
@@ -83,8 +83,6 @@ module Epp' (target : Location) (A : Type) (l : Location) where
   ... | yes _ = A
   ... | no  _ = ⊤
 
-  open Choreo _＠_
-
   instance
     ＠-isLocated : IsLocated _＠_
     IsLocated.fmap ＠-isLocated {l} with l ≟ target
@@ -96,6 +94,8 @@ module Epp' (target : Location) (A : Type) (l : Location) where
     IsLocated.join ＠-isLocated {l} with l ≟ target
     ... | yes _ = λ x → x
     ... | no  _ = λ x → x
+
+  open Choreo {{...}}
 
   empty : {False (l ≟ target)} → A ＠ l
   empty {¬p} with l ≟ target
@@ -119,34 +119,36 @@ module Epp' (target : Location) (A : Type) (l : Location) where
   ... | no  _ | no  _ = (epp ∘ k) m
 
 module _ where
+  variable
+    _＠_ : Type → Location → Type
+
+  open Choreo {{...}}
+  open IsLocated {{...}}
+
   open import Data.Nat using (ℕ; _+_)
 
   alice bob : Location
   alice = "alice"
   bob   = "bob"
 
-  module _ (_＠_ : Type → Location → Type) {{_ : IsLocated _＠_}} where
-    open Choreo _＠_
-    open IsLocated {{...}}
-
-    choreo : (ℕ ＠ alice) → Choreo (ℕ ＠ alice)
-    choreo a =
-      bind (alice ∼[ a  ]> bob)   λ a′ →
-      bind (bob   ∼[ a′ ]> alice) λ a″ →
-      return (fmap₂ _+_ a a″)
+  choreo : {{_ : IsLocated _＠_}} → (ℕ ＠ alice) → Choreo (ℕ ＠ alice)
+  choreo a =
+    bind (alice ∼[ a  ]> bob)   λ a′ →
+    bind (bob   ∼[ a′ ]> alice) λ a″ →
+    return (fmap₂ _+_ a a″)
 
   test-alice : ℕ → Network ℕ
-  test-alice n = epp (choreo _＠_ (given n))
+  test-alice n = epp (choreo (given n))
     where open Epp alice
 
   test-bob : Network ⊤
-  test-bob = epp (choreo _＠_ empty)
+  test-bob = epp (choreo empty)
     where open Epp bob
 
   test-alice' : ℕ → Network ℕ
-  test-alice' n = epp (choreo _＠_ (given n))
+  test-alice' n = epp (choreo (given n))
     where open Epp' alice ℕ alice
 
   test-bob' : Network ⊤
-  test-bob' = epp (choreo _＠_ empty)
+  test-bob' = epp (choreo empty)
     where open Epp' bob ℕ alice
