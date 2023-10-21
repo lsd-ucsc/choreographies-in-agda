@@ -2,7 +2,7 @@
 open import Agda.Primitive
   using () renaming (Set to Type)
 
-module Choreographies.Choreo (M : Type → Type) where
+module Choreographies.Choreo (M : Type → Type) (mpure : ∀{A} → A → M A) where
 
 open import Choreographies.Freer as Freer renaming (pure to return)
 open import Choreographies.Located
@@ -19,12 +19,18 @@ private
     A : Type
 
 module Choreo {_＠_} {{_ : IsLocated _＠_}} where
-  data ChoreoSig : Type → Type₁ where
-    lift : ∀ l   → M A ＠ l → ChoreoSig (A ＠ l)
-    comm : ∀ s r →   A ＠ s → ChoreoSig (A ＠ r)
+  open IsLocated {{...}}
 
-  _∼[_]>_ : (s : Location) → A ＠ s → (r : Location) → ChoreoSig (A ＠ r)
-  s ∼[ m ]> r = comm s r m
+  data ChoreoSig : Type → Type₁ where
+    step : ∀ s r → M A ＠ s → ChoreoSig (A ＠ r)
+
+  comm : ∀ s r →   A ＠ s → ChoreoSig (A ＠ r)
+  comm s r = step s r ∘ fmap mpure
+
+  lift : ∀ l   → M A ＠ l → ChoreoSig (A ＠ l)
+  lift l = step l l
+
+  syntax comm s r m = s ∼[ m ]> r
 
   Choreo : Type → Type₁
   Choreo = Freer ChoreoSig
@@ -43,6 +49,9 @@ module Epp (target : Location) where
 
   given : ∀{A l} → {True (l ≟ target)} → A → A ＠ l
   given {_} {_} {p} = here (toWitness p)
+
+  pass : ∀{ℓ₁ ℓ₂} {A : Type ℓ₁} {B : Type ℓ₂} → A → (A → B) → B
+  pass a f = f a
 
   open Choreo {{...}}
 
@@ -68,14 +77,12 @@ module Epp (target : Location) where
     epp (return x) with l ≟ target
     ... | yes p = return (unwrap {{p}} x)
     ... | no ¬p = return tt
-    epp (bind (lift l (here   p a)) k) = bind (exec a) (epp ∘ k ∘ here p)
-    epp (bind (lift l (there ¬p a)) k) = epp (k (there ¬p a))
-    epp (bind (comm s r (here _ m)) k) with r ≟ target
-    ... | yes p = epp (k (here p m))
+    epp (bind (step s r (here _ m)) k) with r ≟ target
+    ... | yes p = bind (exec m  ) (epp ∘ k ∘ here   p)
     ... | no ¬p = bind (send m r) (epp ∘ k ∘ there ¬p)
-    epp (bind (comm s r (there _ m)) k) with r ≟ target
-    ... | yes p = bind (recv s) (epp ∘ k ∘ here p)
-    ... | no ¬p = epp (k (there ¬p m))
+    epp (bind (step s r (there _ m)) k) with r ≟ target
+    ... | yes p = bind (recv   s) (epp ∘ k ∘ here   p)
+    ... | no ¬p = pass       m    (epp ∘ k ∘ there ¬p)
 
 module Epp' (target : Location) (A : Type) (l : Location) where
   _＠_ : Type → Location → Type
@@ -107,16 +114,16 @@ module Epp' (target : Location) (A : Type) (l : Location) where
   ... | yes _ = λ a → a
   ... | no ¬p = ⊥-elim p
 
+  pass : ∀{ℓ₁ ℓ₂} {A : Type ℓ₁} {B : Type ℓ₂} → A → (A → B) → B
+  pass a f = f a
+
   epp : Choreo (A ＠ l) → Network (A ＠ l)
   epp (return x) = return x
-  epp (bind (lift l a) k) with l ≟ target
-  ... | yes _ = bind (exec a) (epp ∘ k)
-  ... | no  _ = (epp ∘ k) a
-  epp (bind (comm s r m) k) with s ≟ target | r ≟ target
-  ... | yes _ | yes _ = (epp ∘ k) m
+  epp (bind (step s r m) k) with s ≟ target | r ≟ target
+  ... | yes _ | yes _ = bind (exec m  ) (epp ∘ k)
   ... | yes _ | no  _ = bind (send m r) (epp ∘ k)
   ... | no  _ | yes _ = bind (recv   s) (epp ∘ k)
-  ... | no  _ | no  _ = (epp ∘ k) m
+  ... | no  _ | no  _ = pass       m    (epp ∘ k)
 
 module _ where
   variable
