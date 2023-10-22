@@ -185,9 +185,9 @@ module _ where
     where open Epp bob
 
   test-alice' : ℕ → Network ℕ
-  test-alice' n = epp (choreo (given n))
+  test-alice' n = epp (choreo n)
     where open Epp' alice ℕ alice
 
   test-bob' : Network ⊤
-  test-bob' = epp (choreo empty)
+  test-bob' = epp (choreo tt)
     where open Epp' bob ℕ alice
