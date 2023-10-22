@@ -5,16 +5,8 @@ open import Agda.Primitive
 module Choreographies.Typeclass where
   open import Function using (_∘_; id)
   open import Data.Unit using (⊤; tt)
-  open import Data.String as String using (String)
-  open import Relation.Nullary using (Dec; yes; no)
+  open import Data.Bool using (Bool; true; false)
   open import Relation.Binary.PropositionalEquality using (_≡_)
-
-  Location : Type
-  Location = String
-
-  _≟_ : (l l' : Location) → Dec (l ≡ l')
-  _≟_ = String._≟_
-
 
   record Monad (M : Type → Type) : Type₁ where
     field pure : ∀{A}   →  A         → M A
@@ -54,7 +46,7 @@ module Choreographies.Typeclass where
   Monad.bind id-isMonad = λ z → z
 
 
-  record Choreographic (M : Type → Type) (_＠_ : Type → Location → Type) : Type₁ where
+  record Choreographic {Location : Type} (M : Type → Type) (_＠_ : Type → Location → Type) : Type₁ where
     field {{＠-monadic}} : ∀{l} → Monad (_＠ l)
     field {{M-monadic}}  : Monad M
 
@@ -72,37 +64,38 @@ module Choreographies.Typeclass where
   open Choreographic {{...}} public
 
 
-  record MonadNetwork (M : Type → Type) : Type₁ where
+  record MonadNetwork (Location : Type) (M : Type → Type) : Type₁ where
     field {{M-isMonad}} : Monad M
     field send : Location → {A : Type} → A → M ⊤
     field recv : Location → (A : Type)     → M A
   open MonadNetwork {{...}} using (send; recv) public
 
-  module EppNetwork {M} {{_ : MonadNetwork M}} (target : Location) where
+  module EppNetwork {Location : Type} (here? : Location → Bool)
+                    {M} {{_ : MonadNetwork Location M}} where
     _＠_ : Type → Location → Type
-    A ＠ l with l ≟ target
-    ... | yes _ = A
-    ... | no  _ = ⊤
+    A ＠ l with here? l
+    ... | true  = A
+    ... | false = ⊤
 
     ＠-isMonad : ∀{l} → Monad (_＠ l)
-    Monad.pure (＠-isMonad {l}) with l ≟ target
-    ... | yes _ = λ z → z
-    ... | no  _ = λ _ → tt
-    Monad.bind (＠-isMonad {l}) with l ≟ target
-    ... | yes _ = λ z → z
-    ... | no  _ = λ _ _ → tt
+    Monad.pure (＠-isMonad {l}) with here? l
+    ... | true  = λ z → z
+    ... | false = λ _ → tt
+    Monad.bind (＠-isMonad {l}) with here? l
+    ... | true  = λ z → z
+    ... | false = λ _ _ → tt
 
     instance
       ＠-isChoreographic : Choreographic M _＠_
       Choreographic.＠-monadic ＠-isChoreographic = ＠-isMonad
-      Choreographic.step ＠-isChoreographic s r m with s ≟ target | r ≟ target
-      ... | yes _ | yes _ = m
-      ... | yes _ | no  _ = m >>= send r
-      ... | no  _ | yes _ = recv s _
-      ... | no  _ | no  _ = pure tt
+      Choreographic.step ＠-isChoreographic s r m with here? s | here? r
+      ... | true  | true  = m
+      ... | true  | false = m >>= send r
+      ... | false | true  = recv s _
+      ... | false | false = pure tt
 
 
-  module EppLocal {M} {{_ : Monad M}} where
+  module EppLocal {Location : Type} {M} {{_ : Monad M}} where
     _＠_ : Type → Location → Type
     A ＠ l = A
 
@@ -115,14 +108,22 @@ module Choreographies.Typeclass where
 
   module Demo where
     open import Data.Nat as Nat using (ℕ; _+_)
+    open import Data.String as String using (String)
+    open import Relation.Nullary using (Dec; does)
 
-    variable
-      C    : Type → Type
-      _＠_ : Type → Location → Type
+    Location : Type
+    Location = String
+
+    _≟_ : (l l' : Location) → Dec (l ≡ l')
+    _≟_ = String._≟_
 
     alice bob : Location
     alice = "alice"
     bob   = "bob"
+
+    variable
+      C    : Type → Type
+      _＠_ : Type → Location → Type
 
     choreo : {{Choreographic C _＠_}} → (ℕ ＠ alice) → C (ℕ ＠ alice)
     choreo a = do
@@ -134,10 +135,10 @@ module Choreographies.Typeclass where
     test-global = choreo
       where open EppLocal
 
-    test-alice : {{MonadNetwork C}} → (ℕ → C ℕ)
+    test-alice : {{MonadNetwork Location C}} → (ℕ → C ℕ)
     test-alice = choreo
-      where open EppNetwork alice
+      where open EppNetwork (does ∘ _≟ alice)
 
-    test-bob : {{MonadNetwork C}} → (⊤ → C ⊤)
+    test-bob : {{MonadNetwork Location C}} → (⊤ → C ⊤)
     test-bob = choreo
-      where open EppNetwork bob
+      where open EppNetwork (does ∘ _≟ bob)
