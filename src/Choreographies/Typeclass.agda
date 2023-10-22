@@ -101,10 +101,6 @@ module Choreographies.Typeclass where
       ... | no  _ | yes _ = recv s _
       ... | no  _ | no  _ = pure tt
 
-    epp : ∀{A l} → (∀{_＠_} {{_ : Choreographic M _＠_}} → A ＠ l)
-        → A ＠ l
-    epp x = x {{＠-isChoreographic}}
-
 
   module EppLocal {M} {{_ : Monad M}} where
     _＠_ : Type → Location → Type
@@ -115,10 +111,6 @@ module Choreographies.Typeclass where
       Monad.pure (Choreographic.＠-monadic ＠-isChoreographic) = λ z → z
       Monad.bind (Choreographic.＠-monadic ＠-isChoreographic) = λ z → z
       Choreographic.step ＠-isChoreographic s r m = m
-
-    epp : ∀{A l} → (∀{_＠_} {{_ : Choreographic M _＠_}} → M (A ＠ l))
-        → M (A ＠ l)
-    epp x = x {{＠-isChoreographic}}
 
 
   module Demo where
