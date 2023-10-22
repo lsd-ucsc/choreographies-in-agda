@@ -142,3 +142,8 @@ module Choreographies.Typeclass where
     test-bob : {{MonadNetwork Location C}} → (⊤ → C ⊤)
     test-bob = choreo
       where open EppNetwork (does ∘ _≟ bob)
+
+    -- Schedule all roles onto the same endpoint.
+    test-both : {{MonadNetwork Location C}} → (ℕ → C ℕ)
+    test-both = choreo
+      where open EppNetwork (λ _ → true)
