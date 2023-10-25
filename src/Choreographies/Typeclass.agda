@@ -52,6 +52,7 @@ module Choreographies.Typeclass where
 
     -- A pseudo-traversable law: M and ＠ commute up to a change in location
     field step : ∀{A} s r → (M A) ＠ s → M (A ＠ r)
+    field undo : ∀{A} l   → M (A ＠ l) → (M A) ＠ l
 
     comm : ∀{A} s r → A ＠ s → M (A ＠ r)
     comm s r m = step s r (fmap pure m)
@@ -93,7 +94,9 @@ module Choreographies.Typeclass where
       ... | true  | false = m >>= send r
       ... | false | true  = recv s _
       ... | false | false = pure tt
-
+      Choreographic.undo ＠-isChoreographic l m with here? l
+      ... | true  = m
+      ... | false = tt
 
   module EppLocal {Location : Type} {M} {{_ : Monad M}} where
     _＠_ : Type → Location → Type
@@ -104,6 +107,7 @@ module Choreographies.Typeclass where
       Monad.pure (Choreographic.＠-monadic ＠-isChoreographic) = λ z → z
       Monad.bind (Choreographic.＠-monadic ＠-isChoreographic) = λ z → z
       Choreographic.step ＠-isChoreographic s r m = m
+      Choreographic.undo ＠-isChoreographic l m = m
 
 
   module Demo where
@@ -142,3 +146,6 @@ module Choreographies.Typeclass where
     test-bob : {{MonadNetwork Location C}} → (⊤ → C ⊤)
     test-bob = choreo
       where open EppNetwork (does ∘ _≟ bob)
+
+    choreo' : {{Choreographic C _＠_}} → (ℕ ＠ alice) → C (ℕ ＠ alice)
+    choreo' a = step bob alice (undo _ (step alice bob (fmap pure a)))
