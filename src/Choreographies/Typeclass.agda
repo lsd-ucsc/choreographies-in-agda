@@ -6,105 +6,95 @@ module Choreographies.Typeclass where
   open import Function using (_∘_; id)
   open import Data.Unit using (⊤; tt)
   open import Data.Bool using (Bool; true; false)
-  open import Relation.Binary.PropositionalEquality using (_≡_)
+  open import Relation.Nullary using (Dec; yes; no)
+  open import Relation.Binary.PropositionalEquality as Eq using (_≡_)
 
-  record Monad (M : Type → Type) : Type₁ where
-    field pure : ∀{A}   →  A         → M A
-    field bind : ∀{A B} → (A → M B) → (M A → M B)
+  record Functor (F : Type → Type) : Type₁ where
+    field fmap : ∀{A B} → (A → B) → (F A → F B)
+    fmap₀ = fmap
 
-    return = pure
+  record Applicative (F : Type → Type) : Type₁ where
+    field pure : ∀{A}   →    A      →  F A
+    field ap   : ∀{A B} → F (A → B) → (F A → F B)
 
-    _>>=_ : ∀{A B} → M A → (A → M B) → M B
-    x >>= f = bind f x
+    _<*>_  = ap
 
-    _>>_ : ∀{A B} → M A → M B → M B
-    x >> y = x >>= (λ _ → y)
+    fmap₁ : ∀{A B} → (A → B) → (F A → F B)
+    fmap₁ f a = ⦇ f a ⦈
+
+    fmap₂ : ∀{A₁ A₂ B} → (A₁ → A₂ → B) → (F A₁ → F A₂ → F B)
+    fmap₂ f a₁ a₂ = ⦇ f a₁ a₂ ⦈
 
     fmap₀ = pure
-
-    fmap₁ : ∀{A B} → (A → B) → (M A → M B)
-    fmap₁ f a = do
-      a' <- a
-      pure (f a')
-
-    fmap₂ : ∀{A₁ A₂ B} → (A₁ → A₂ → B) → (M A₁ → M A₂ → M B)
-    fmap₂ f a₁ a₂ = do
-      a₁' <- a₁
-      a₂' <- a₂
-      pure (f a₁' a₂')
-
     fmap  = fmap₁
     _<$>_ = fmap₁
+  open Applicative {{...}} public
 
-    _<*>_ : ∀{A B} → M (A → B) → (M A → M B)
-    _<*>_ = fmap₂ (λ f x → f x)
+  record Monad (M : Type → Type) : Type₁ where
+    field return : ∀{A} → A → M A
+    field bind : ∀{A B} → M A → (A → M B) → M B
 
+    _>>=_  = bind
+
+    _>>_ : ∀{A B} → M A → M B → M B
+    x >> y = x >>= λ _ → y
   open Monad {{...}} public
 
-  id-isMonad : Monad id
-  Monad.pure id-isMonad = λ z → z
-  Monad.bind id-isMonad = λ z → z
+  id-isApplicative : Applicative id
+  Applicative.pure id-isApplicative = λ z → z
+  Applicative.ap id-isApplicative = λ z → z
 
 
-  record Choreographic {Location : Type} (M : Type → Type) (_＠_ : Type → Location → Type) : Type₁ where
-    field {{＠-monadic}} : ∀{l} → Monad (_＠ l)
-    field {{M-monadic}}  : Monad M
-
-    -- A pseudo-traversable law: M and ＠ commute up to a change in location
-    field step : ∀{A} s r → (M A) ＠ s → M (A ＠ r)
-
-    comm : ∀{A} s r → A ＠ s → M (A ＠ r)
-    comm s r m = step s r (fmap pure m)
-
-    lift : ∀{A} l → M A ＠ l → M (A ＠ l)
-    lift l = step l l
-
+  record Choreographic {Location : Type} (_＠_ : Type → Location → Type) : Type₁ where
+    field comm : ∀{A} s r → A ＠ s → A ＠ r
     syntax comm s r m = s ∼[ m ]> r
-
   open Choreographic {{...}} public
 
 
   record MonadNetwork (Location : Type) (M : Type → Type) : Type₁ where
-    field {{M-isMonad}} : Monad M
+    field {{Network-isMonad}} : Monad M
     field send : Location → {A : Type} → A → M ⊤
     field recv : Location → (A : Type)     → M A
   open MonadNetwork {{...}} using (send; recv) public
 
-  module EppNetwork {Location : Type} (here? : Location → Bool)
-                    {M} {{_ : MonadNetwork Location M}} where
-    _＠_ : Type → Location → Type
-    A ＠ l with here? l
-    ... | true  = A
-    ... | false = ⊤
+  record DecidableType (T : Type) : Type₁ where
+    constructor decide
+    field _≟_ : (t₁ t₂ : T) → Dec (t₁ ≡ t₂)
+  open DecidableType {{...}} using (_≟_) public
 
-    ＠-isMonad : ∀{l} → Monad (_＠ l)
-    Monad.pure (＠-isMonad {l}) with here? l
-    ... | true  = λ z → z
-    ... | false = λ _ → tt
-    Monad.bind (＠-isMonad {l}) with here? l
-    ... | true  = λ z → z
-    ... | false = λ _ _ → tt
+  module EppNetwork {Location : Type} {{_ : DecidableType Location}} (target : Location)
+                    {M} {{_ : MonadNetwork Location M}}
+                    where
+    _＠_ : Type → Location → Type
+    A ＠ l with l ≟ target
+    ... | yes _ = M A
+    ... | no  _ = M ⊤
 
     instance
-      ＠-isChoreographic : Choreographic M _＠_
-      Choreographic.＠-monadic ＠-isChoreographic = ＠-isMonad
-      Choreographic.step ＠-isChoreographic s r m with here? s | here? r
-      ... | true  | true  = m
-      ... | true  | false = m >>= send r
-      ... | false | true  = recv s _
-      ... | false | false = pure tt
-
-
-  module EppLocal {Location : Type} {M} {{_ : Monad M}} where
-    _＠_ : Type → Location → Type
-    A ＠ l = A
+      ＠-isApplicative : ∀{l} → Applicative (_＠ l)
+      Applicative.pure (＠-isApplicative {l}) with l ≟ target
+      ... | yes _ = return
+      ... | no  _ = λ _ → return tt
+      Applicative.ap (＠-isApplicative {l}) with l ≟ target
+      ... | yes _ = λ f x → f >>= λ f' → x >>= λ x' → return (f' x')
+      ... | no  _ = λ f x → f >>= λ f' → x >>= λ x' → return tt
 
     instance
-      ＠-isChoreographic : Choreographic M _＠_
-      Monad.pure (Choreographic.＠-monadic ＠-isChoreographic) = λ z → z
-      Monad.bind (Choreographic.＠-monadic ＠-isChoreographic) = λ z → z
-      Choreographic.step ＠-isChoreographic s r m = m
+      ＠-isChoreographic : Choreographic _＠_
+      Choreographic.comm ＠-isChoreographic s r m with s ≟ target | r ≟ target
+      ... | yes _ | yes _ = m
+      ... | yes _ | no  _ = m >>= send r
+      ... | no  _ | yes _ = m >> recv s _
+      ... | no  _ | no  _ = m
 
+
+  module EppLocal {Location : Type} {M : Type → Type} where
+    _＠_ : Type → Location → Type
+    A ＠ l = M A
+
+    instance
+      ＠-isChoreographic : Choreographic _＠_
+      Choreographic.comm ＠-isChoreographic s r m = m
 
   module Demo where
     open import Data.Nat as Nat using (ℕ; _+_)
@@ -114,36 +104,30 @@ module Choreographies.Typeclass where
     Location : Type
     Location = String
 
-    _≟_ : (l l' : Location) → Dec (l ≡ l')
-    _≟_ = String._≟_
+    instance
+      zz : DecidableType String
+      zz = decide String._≟_
 
     alice bob : Location
     alice = "alice"
     bob   = "bob"
 
-    variable
-      C    : Type → Type
-      _＠_ : Type → Location → Type
-
-    choreo : {{Choreographic C _＠_}} → (ℕ ＠ alice) → C (ℕ ＠ alice)
+    choreo : ∀{_＠_} → {{Choreographic _＠_}} → {{∀{l} → Applicative (_＠ l)}}
+           → (ℕ ＠ alice) → (ℕ ＠ alice)
     choreo a = do
-      a′ <- alice ∼[ a  ]> bob
-      a″ <- bob   ∼[ a′ ]> alice
-      return ⦇ a + a″ ⦈
+      let a′ = alice ∼[ a ]> bob
+      let b = ⦇ a′ + a′ ⦈
+      let a″ = bob   ∼[ b ]> alice
+      a″
 
-    test-global : {{Monad id}} → ℕ → ℕ
+    test-global : {{Applicative id}} → ℕ → ℕ
     test-global = choreo
       where open EppLocal
 
-    test-alice : {{MonadNetwork Location C}} → (ℕ → C ℕ)
-    test-alice = choreo
-      where open EppNetwork (does ∘ _≟ alice)
+    test-alice : ∀{C} → {{MonadNetwork Location C}} → (C ℕ → C ℕ)
+    test-alice = choreo {{＠-isChoreographic}} {{λ{l} → ＠-isApplicative {_} {l}}}
+      where open EppNetwork alice
 
-    test-bob : {{MonadNetwork Location C}} → (⊤ → C ⊤)
-    test-bob = choreo
-      where open EppNetwork (does ∘ _≟ bob)
-
-    -- Schedule all roles onto the same endpoint.
-    test-both : {{MonadNetwork Location C}} → (ℕ → C ℕ)
-    test-both = choreo
-      where open EppNetwork (λ _ → true)
+    test-bob : ∀{C} → {{MonadNetwork Location C}} → (C ⊤ → C ⊤)
+    test-bob = choreo {_＠_} {{＠-isChoreographic}} {{λ{l} → ＠-isApplicative {_} {l}}}
+      where open EppNetwork bob
